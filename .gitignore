@@ -2,3 +2,4 @@
 build/*
 package
 *.egg-info
+**/*.pyc
