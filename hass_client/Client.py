@@ -17,11 +17,6 @@ from telldus import DeviceManager, Device
 
 __name__ = 'HASSMQTT'  # pylint: disable=W0622
 
-# On mips 0.1 might be represented as 0.10000000000000001. This is a workaround.
-class FloatWrapper(float):
-	def __repr__(self):
-		return '%.15g' % self
-
 ScaleConverter = {
 	Device.WATT: {
 		Device.SCALE_POWER_KWH: "kWh",
