@@ -115,7 +115,8 @@ class Client(Plugin):
 
 	def onShutdown(self):
 		self._running = False
-		self.client.disconnect()	
+		self.client.loop_stop()
+		self.client.disconnect()
 
 	def getKnownDevices(self):
 		if not self._knownDevices:
