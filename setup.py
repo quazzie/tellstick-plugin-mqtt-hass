@@ -8,7 +8,7 @@ except ImportError:
 
 setup(
 	name='MQTT Homeassistant',
-	version='0.67',
+	version='0.68',
 	description='Plugin to connect to Homeassistant via MQTT Autodiscover',
 	icon='hass.png',
 	color='#660066',

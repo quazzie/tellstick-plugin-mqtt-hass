@@ -322,7 +322,6 @@ class Client(Plugin):
 				})
 			if deviceType == 'light':
 				deviceConfig.update({
-					"platform": "mqtt",
 					"schema": "json",
 					"brightness": True
 				})
