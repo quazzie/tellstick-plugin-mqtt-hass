@@ -17,11 +17,6 @@ from telldus import DeviceManager, Device
 
 __name__ = 'HASSMQTT'  # pylint: disable=W0622
 
-# On mips 0.1 might be represented as 0.10000000000000001. This is a workaround.
-class FloatWrapper(float):
-	def __repr__(self):
-		return '%.15g' % self
-
 ScaleConverter = {
 	Device.WATT: {
 		Device.SCALE_POWER_KWH: "kWh",
@@ -124,7 +119,10 @@ class Client(Plugin):
 
 	def getKnownDevices(self):
 		if not self._knownDevices:
-			self._knownDevices = [tuple(x) for x in json.loads(self.config('devices_configured'))]
+			if self.config('devices_configured'):
+				self._knownDevices = [tuple(x) for x in json.loads(self.config('devices_configured'))]
+			else:
+				self._knownDevices = []
 		return self._knownDevices
 	
 	def setKnownDevices(self, devices):
@@ -323,7 +321,8 @@ class Client(Plugin):
 				})
 			if deviceType == 'light':
 				deviceConfig.update({
-					"platform": "mqtt_json",
+					"platform": "mqtt",
+					"schema": "json",
 					"brightness": True
 				})
 			if deviceType == 'switch' and (device.methods() & Device.BELL):
