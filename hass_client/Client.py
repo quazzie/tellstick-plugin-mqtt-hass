@@ -5,6 +5,7 @@ import json
 from base import \
 	Application, \
 	Plugin, \
+	Settings, \
 	configuration, \
 	ConfigurationNumber, \
 	ConfigurationString, \
@@ -13,16 +14,19 @@ from base import \
 	slot
 import paho.mqtt.client as mqtt
 import logging
+from board import Board
 from telldus import DeviceManager, Device
 
 __name__ = 'HASSMQTT'  # pylint: disable=W0622
 
 ScaleConverter = {
 	Device.WATT: {
+		1: "kVAh", #Device.SCALE_POWER_KVAH
 		Device.SCALE_POWER_KWH: "kWh",
 		Device.SCALE_POWER_WATT: "W",
-		4: "V",
-		5: "A"
+		4: "V", #Device.SCALE_POWER_VOLT
+		5: "A", #Device.SCALE_POWER_AMPERE
+		6: "PF" #Device.SCALE_POWER_POWERFACTOR
 	},
 	Device.TEMPERATURE: {
 		Device.SCALE_TEMPERATURE_CELCIUS: u"°C",
@@ -81,16 +85,23 @@ ScaleConverter = {
 		title="Autodiscovery topic",
 		description="Homeassistants autodiscovery topic"
 	),
-	availability_topic=ConfigurationString(
-		defaultValue='telldus/available',
-		title='Availability topic',
-		description='If set, will post online/offline to this topic'
+	base_topic=ConfigurationString(
+		defaultValue="telldus",
+		title="Base topic",
+		description="Base topic for this device"
 	),
-	debug_topic=ConfigurationString(
-		defaultValue='telldus/debug',
-		title='Debug topic',
-		description='Where to post debug messages'
-	),
+
+#	availability_topic=ConfigurationString(
+#		defaultValue='telldus/available',
+#		title='Availability topic',
+#		description='If set, will post online/offline to this topic'
+#	),
+#	debug_topic=ConfigurationString(
+#		defaultValue='telldus/debug',
+#		title='Debug topic',
+#		description='Where to post debug messages'
+#	),
+
 	devices_configured=ConfigurationString(
 		defaultValue='',
 		hidden=True,
@@ -102,6 +113,8 @@ class Client(Plugin):
 	implements(ISignalObserver)
 
 	def __init__(self):
+		self._appsettings = Settings('tellduslive.config')
+		self._uuid = self._appsettings['uuid']
 		self._ready = False
 		self._running = True
 		self._knownDevices = None
@@ -150,21 +163,24 @@ class Client(Plugin):
 	def connect(self):
 		username = self.config('username')
 		password = self.config('password')
-		availability_topic = self.config('availability_topic')
+		base_topic = self.config('base_topic')
+		#availability_topic = self.config('availability_topic')
 		hostname = self.config('hostname')
 		port = self.config('port')
 		
 		if username != '':
 			self.client.username_pw_set(username, password)
-		if availability_topic != '':
-			self.client.will_set(availability_topic, "offline", 0, True)
+		#if availability_topic != '':
+		self.client.will_set('%s/available' % (base_topic), "offline", 0, True)
 		self.client.connect_async(hostname, port, keepalive=10)
 		self.client.loop_start()
 
 	def debug(self, msg):
-		debugTopic = self.config('debug_topic')
-		if debugTopic:
-			self.client.publish(debugTopic, msg)
+		base_topic = self.config('base_topic')
+		debugTopic = '%s/debug' % (base_topic)
+		#debugTopic = self.config('debug_topic')
+		#if self.config('debug'):
+		self.client.publish(debugTopic, msg)
 
 	def getDeviceType(self, device):
 		capabilities = device.methods()
@@ -260,7 +276,18 @@ class Client(Plugin):
 			self.debug('batteryState exception %s' % e.message)
 
 	def discover(self, device, type, deviceId, config):
-		config.update({ 'unique_id': 'telldus_%s' % deviceId })
+		base_topic = self.config('base_topic')
+		config.update({ 
+			'unique_id': 'telldus_%s' % deviceId,
+			'availability_topic': '%s/available' % (base_topic),
+			'device': {
+				'identifiers': self._uuid,
+				'name': 'telldus',
+				'sw_version': Board.firmwareVersion(),
+				'model': Board.product(),
+				'manufacturer': 'Telldus Technologies'
+			} 
+		})
 		self.client.publish(
 			'%s/config' % self.getDeviceTopic(type, deviceId), 
 			json.dumps(config),
@@ -280,8 +307,8 @@ class Client(Plugin):
 				"name": "%s - Battery" % device.name(),
 				"unit_of_measurement": "%"
 			}
-			if self.config('availability_topic'):
-				sensorConfig.update({ "availability_topic": self.config('availability_topic') })
+			#if self.config('availability_topic'):
+			#	sensorConfig.update({ "availability_topic": self.config('availability_topic') })
 			return self.discover(device, "sensor", self.getBatteryId(device), sensorConfig)
 		except Exception as e:
 			self.debug('discoverBattery %s' % str(e))
@@ -298,8 +325,8 @@ class Client(Plugin):
 				"json_attributes": ['lastUpdated'],
 				"unit_of_measurement": self.formatScale(type, scale),
 			}
-			if self.config('availability_topic'):
-				sensorConfig.update({ "availability_topic": self.config('availability_topic') })
+			#if self.config('availability_topic'):
+			#	sensorConfig.update({ "availability_topic": self.config('availability_topic') })
 			sensorId = self.getSensorId(device.id(), type, scale)
 			return self.discover(device, "sensor", sensorId, sensorConfig)
 		except Exception as e:
@@ -313,8 +340,8 @@ class Client(Plugin):
 
 			deviceTopic = self.getDeviceTopic(deviceType, device.id())
 			deviceConfig = { "name": device.name() }
-			if self.config('availability_topic'):
-				deviceConfig.update({ "availability_topic": self.config('availability_topic') })
+			#if self.config('availability_topic'):
+			#	deviceConfig.update({ "availability_topic": self.config('availability_topic') })
 
 			if deviceType in ['switch', 'light', 'cover']:
 				deviceConfig.update({
@@ -395,9 +422,10 @@ class Client(Plugin):
 			self.debug('run_discovery exception %s' % e.message)
 
 	def onConnect(self, client, userdata, flags, result):
-		availabilityTopic = self.config('availability_topic')
-		if availabilityTopic != '':
-			self.client.publish(availabilityTopic, 'online', 0, True)
+		base_topic = self.config('base_topic')
+		#availabilityTopic = self.config('availability_topic')
+		#if availabilityTopic != '':
+		self.client.publish('%s/available' % (base_topic), 'online', 0, True)
 		self.debug("Hello from telldus, connected")
 		try:
 			self.debug("KnownDevices: %s" % self.getKnownDevices())
@@ -498,6 +526,7 @@ class Client(Plugin):
 		try:
 			topic = msg.topic
 			payload = msg.payload
+
 			topicType = topic.split('/')[-1]
 			deviceManager = DeviceManager(self.context)
 			
