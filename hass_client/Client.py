@@ -16,6 +16,7 @@ import paho.mqtt.client as mqtt
 import logging
 from board import Board
 from telldus import DeviceManager, Device
+import netifaces
 
 __name__ = 'HASSMQTT'  # pylint: disable=W0622
 
@@ -58,6 +59,14 @@ ScaleConverter = {
 		Device.SCALE_BAROMETRIC_PRESSURE_KPA: "kPa"
 	}
 }
+
+def getMacAddr(ifname):
+	addrs = netifaces.ifaddresses(ifname)
+	try:
+		mac = addrs[netifaces.AF_LINK][0]['addr']
+	except (IndexError, KeyError) as e:
+		return ''
+	return mac.upper().replace(':', '')
 
 @configuration(
 	username = ConfigurationString(
@@ -114,7 +123,7 @@ class Client(Plugin):
 
 	def __init__(self):
 		self._appsettings = Settings('tellduslive.config')
-		self._uuid = self._appsettings['uuid']
+		self._uuid = getMacAddr(Board.networkInterface())
 		self._ready = False
 		self._running = True
 		self._knownDevices = None
@@ -553,3 +562,5 @@ class Client(Plugin):
 				device.command('up' if payload == 'OPEN' else 'down' if payload == 'CLOSE' else 'stop', origin = 'mqtt_hass')
 		except Exception as e:
 			self.debug('onMessage exception %s' % e.message)
+
+	
