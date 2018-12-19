@@ -233,14 +233,22 @@ class Client(Plugin):
 			if not deviceType:
 				return
 
+			self.debug('deviceState %s, state: %s, value: %s' % (device.id(), state, stateValue))
+
 			stateTopic = '%s/state' % self.getDeviceTopic(deviceType, device.id())
 			payload = ''
 
 			if deviceType in ['light']:
-				payload = json.dumps({
-					'state': 'ON' if state == Device.TURNON or stateValue > 0 else 'OFF',
-					'brightness': int(stateValue) if stateValue else 0
-				})
+				if state == Device.DIM:
+					payload = json.dumps({
+						'state': 'ON' if stateValue and int(stateValue) > 0 else 'OFF',
+						'brightness': int(stateValue) if stateValue else 0
+					})
+				else:
+					payload = json.dumps({
+						'state': 'ON' if state == Device.TURNON else 'OFF',
+						'brightness': int(stateValue) if stateValue else 0
+					})
 			elif deviceType in ['switch']:
 				payload = 'ON' if state in [Device.TURNON, Device.BELL] else 'OFF' 
 			elif deviceType in ['binary_sensor']:
@@ -556,7 +564,10 @@ class Client(Plugin):
 			if deviceType == 'light':
 				payload = json.loads(payload)
 				if 'brightness' in payload:
-					device.command('dim', int(payload['brightness']), origin = 'mqtt_hass')
+					if int(payload['brightness']) == 0:
+						device.command('turnoff', origin = 'mqtt_hass')
+					else:
+						device.command('dim', int(payload['brightness']), origin = 'mqtt_hass')
 				else:
 					device.command('turnon' if payload['state'] == 'ON' else 'turnoff', origin = 'mqtt_hass')
 			elif deviceType == 'switch':
