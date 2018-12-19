@@ -556,13 +556,13 @@ class Client(Plugin):
 			if deviceType == 'light':
 				payload = json.loads(payload)
 				if 'brightness' in payload:
-					device.command(Device.DIM, value = int(payload['brightness']), origin = 'mqtt_hass')
+					device.command('dim', int(payload['brightness']), origin = 'mqtt_hass')
 				else:
-					device.command(Device.TURNON if payload['state'] == 'ON' else Device.TURNOFF, origin = 'mqtt_hass')
+					device.command('turnon' if payload['state'] == 'ON' else 'turnoff', origin = 'mqtt_hass')
 			elif deviceType == 'switch':
-				device.command(Device.TURNON if payload == 'ON' else Device.BELL if payload == 'BELL' else Device.TURNOFF, origin = 'mqtt_hass')
+				device.command('turnon' if payload == 'ON' else 'bell' if payload == 'BELL' else 'turnoff', origin = 'mqtt_hass')
 			elif deviceType == 'cover':
-				device.command(Device.UP if payload == 'OPEN' else Device.DOWN if payload == 'CLOSE' else Device.STOP, origin = 'mqtt_hass')
+				device.command('up' if payload == 'OPEN' else 'down' if payload == 'CLOSE' else 'stop', origin = 'mqtt_hass')
 		except Exception as e:
 			userdata.debug('onMessage exception %s' % e.message)
 
