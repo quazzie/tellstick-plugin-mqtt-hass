@@ -247,7 +247,7 @@ class Client(Plugin):
 				else:
 					payload = json.dumps({
 						'state': 'ON' if state == Device.TURNON else 'OFF',
-						'brightness': int(stateValue) if stateValue else 0
+						'brightness': (int(stateValue) or 255) if state == Device.TURNON else 0
 					})
 			elif deviceType in ['switch']:
 				payload = 'ON' if state in [Device.TURNON, Device.BELL] else 'OFF' 
