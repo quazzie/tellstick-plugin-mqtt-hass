@@ -255,7 +255,7 @@ class Client(Plugin):
 				else:
 					payload = json.dumps({
 						'state': 'ON' if state == Device.TURNON else 'OFF',
-						'brightness': (int(stateValue) or 255) if state == Device.TURNON else 0
+						'brightness': (int(stateValue) if stateValue else 255) if state == Device.TURNON else 0
 					})
 			elif deviceType in ['switch']:
 				payload = 'ON' if state in [Device.TURNON, Device.BELL] else 'OFF' 
@@ -572,19 +572,44 @@ class Client(Plugin):
 				'device_type': deviceType,
 				'command': payload
 			}))
+
 			if deviceType == 'light':
 				payload = json.loads(payload)
 				if 'brightness' in payload:
 					if int(payload['brightness']) == 0:
-						device.command('turnoff', origin = 'mqtt_hass')
+						device.command(
+							Device.TURNOFF, 
+							origin = 'mqtt_hass'
+						)
 					else:
-						device.command('dim', value = int(payload['brightness']), origin = 'mqtt_hass')
+						device.command(
+							Device.DIM, 
+							value = int(payload['brightness']), 
+							origin = 'mqtt_hass'
+						)
 				else:
-					device.command('turnon' if payload['state'] == 'ON' else 'turnoff', value = 255, origin = 'mqtt_hass')
+					device.command(
+						Device.TURNON if payload['state'] == 'ON' \
+						else Device.TURNOFF, 
+						value = 255, 
+						origin = 'mqtt_hass'
+					)
+
 			elif deviceType == 'switch':
-				device.command('turnon' if payload == 'ON' else 'bell' if payload == 'BELL' else 'turnoff', origin = 'mqtt_hass')
+				device.command(
+					Device.TURNON if payload == 'ON' \
+					else Device.BELL if payload == 'BELL' \
+					else Device.TURNOFF, 
+					origin = 'mqtt_hass'
+				)
+
 			elif deviceType == 'cover':
-				device.command('up' if payload == 'OPEN' else 'down' if payload == 'CLOSE' else 'stop', origin = 'mqtt_hass')
+				device.command(
+					Device.UP if payload == 'OPEN' \
+					else Device.DOWN if payload == 'CLOSE' else \
+					Device.STOP, 
+					origin = 'mqtt_hass'
+				)
 		except Exception as e:
 			userdata.debug('onMessage exception %s' % e.message)
 
