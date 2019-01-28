@@ -186,14 +186,23 @@ class Client(Plugin):
 		
 		if username != '':
 			self.client.username_pw_set(username, password)
-		self.client.will_set('%s/%s/available' % (base_topic, device_name), 'offline', 0, True)
+		self.client.will_set(
+			'%s/%s/available' % (base_topic, device_name) if base_topic \
+			else '%s/available' % device_name, 
+			'offline', 
+			0, 
+			True
+		)
 		self.client.connect_async(hostname, port, keepalive=10)
 		self.client.loop_start()
 
 	def debug(self, msg):
 		base_topic = self.config('base_topic')
 		device_name = self.config('device_name')
-		debugTopic = '%s/%s/debug' % (base_topic, device_name)
+		debugTopic = (
+			'%s/%s/debug' % (base_topic, device_name) if base_topic \
+			else '%s/debug' % device_name
+		)
 		self.client.publish(debugTopic, msg)
 
 	def getDeviceType(self, device):
@@ -303,7 +312,10 @@ class Client(Plugin):
 		device_name = self.config('device_name')
 		config.update({ 
 			'unique_id': '%s_%s' % (device_name, deviceId),
-			'availability_topic': '%s/%s/available' % (base_topic, device_name),
+			'availability_topic': (
+				'%s/%s/available' % (base_topic, device_name) if base_topic \
+				else '%s/available' % device_name
+			),
 			'device': {
 				'identifiers': getMacAddr(Board.networkInterface()),
 				'connections': [['mac', getMacAddr(Board.networkInterface(), False)]],
@@ -453,7 +465,13 @@ class Client(Plugin):
 	def onConnect(self, client, userdata, flags, result):
 		base_topic = userdata.config('base_topic')
 		device_name = userdata.config('device_name')
-		client.publish('%s/%s/available' % (base_topic, device_name), 'online', 0, True)
+		client.publish(
+			'%s/%s/available' % (base_topic, device_name) if base_topic \
+			else '%s/available' % device_name, 
+			'online', 
+			0, 
+			True
+		)
 		userdata.debug('Hello from %s, connected!' % (device_name))
 		try:
 			userdata.debug('KnownDevices: %s' % userdata.getKnownDevices())
