@@ -101,6 +101,11 @@ def getMacAddr(ifname, compact = True):
 		title='Autodiscovery topic',
 		description='Homeassistants autodiscovery topic'
 	),
+	device_name=ConfigurationString(
+		defaultValue='telldus',
+		title='Device name',
+		description='Name of this device'
+	),
 	base_topic=ConfigurationString(
 		defaultValue='telldus',
 		title='Base topic',
@@ -126,7 +131,7 @@ class Client(Plugin):
 		self.client.on_connect = self.onConnect
 		self.client.on_message = self.onMessage
 		if self.config('hostname') != '':
-			self.connect()
+			Application().queue(self.connect)
 
 	def onShutdown(self):
 		self._running = False
@@ -175,18 +180,20 @@ class Client(Plugin):
 		username = self.config('username')
 		password = self.config('password')
 		base_topic = self.config('base_topic')
+		device_name = self.config('device_name')
 		hostname = self.config('hostname')
 		port = self.config('port')
 		
 		if username != '':
 			self.client.username_pw_set(username, password)
-		self.client.will_set('%s/available' % (base_topic), 'offline', 0, True)
+		self.client.will_set('%s/%s/available' % (base_topic, device_name), 'offline', 0, True)
 		self.client.connect_async(hostname, port, keepalive=10)
 		self.client.loop_start()
 
 	def debug(self, msg):
 		base_topic = self.config('base_topic')
-		debugTopic = '%s/debug' % (base_topic)
+		device_name = self.config('device_name')
+		debugTopic = '%s/%s/debug' % (base_topic, device_name)
 		self.client.publish(debugTopic, msg)
 
 	def getDeviceType(self, device):
@@ -203,8 +210,9 @@ class Client(Plugin):
 			return 'binary_sensor'
 
 	def getDeviceTopic(self, type, id):
-		baseTopic = self.config('discovery_topic')
-		return '%s/%s/telldus/%s' % (baseTopic, type, id)
+		discoverTopic = self.config('discovery_topic')
+		telldusName = self.config('device_name') or 'telldus'
+		return '%s/%s/%s/%s' % (discoverTopic, type, telldusName, id)
 
 	def getSensorId(self, deviceId, valueType, scale):
 		return '%s_%s_%s' % (deviceId, valueType, scale)
@@ -292,9 +300,10 @@ class Client(Plugin):
 
 	def discover(self, device, type, deviceId, config):
 		base_topic = self.config('base_topic')
+		device_name = self.config('device_name')
 		config.update({ 
-			'unique_id': 'telldus_%s' % deviceId,
-			'availability_topic': '%s/available' % (base_topic),
+			'unique_id': '%s_%s' % (device_name, deviceId),
+			'availability_topic': '%s/%s/available' % (base_topic, device_name),
 			'device': {
 				'identifiers': getMacAddr(Board.networkInterface()),
 				'connections': [['mac', getMacAddr(Board.networkInterface(), False)]],
@@ -328,24 +337,25 @@ class Client(Plugin):
 		except Exception as e:
 			self.debug('discoverBattery %s' % str(e))
 
-	def discoverSensor(self, device, type, scale):
+	def discoverSensor(self, device, valueType, scale):
+		sensorId = self.getSensorId(device.id(), valueType, scale)
 		try:
 			sensorConfig = {
 				'name': '%s %s - %s' % (
 					device.name(), 
-					Device.sensorTypeIntToStr(type), 
-					self.formatScale(type, scale)
+					Device.sensorTypeIntToStr(valueType), 
+					self.formatScale(valueType, scale)
 				),
 				'value_template': '{{ value_json.value }}',
-				'json_attributes': ['lastUpdated'],
-				'unit_of_measurement': self.formatScale(type, scale),
+				'json_attributes_topic': '%s/state' % self.getDeviceTopic("sensor", sensorId),
+				'unit_of_measurement': self.formatScale(valueType, scale),
 			}
-			if ClassConverter.get(type, None):
+			if ClassConverter.get(valueType, None):
 				sensorConfig.update({
-					'device_class': ClassConverter.get(type, None)
+					'device_class': ClassConverter.get(valueType, None)
 				})
 
-			sensorId = self.getSensorId(device.id(), type, scale)
+			sensorId = self.getSensorId(device.id(), valueType, scale)
 			return self.discover(device, 'sensor', sensorId, sensorConfig)
 		except Exception as e:
 			self.debug('discoverSensor %s' % str(e))
@@ -386,7 +396,7 @@ class Client(Plugin):
 	def discovery(self, device):
 		result = []
 		try:
-			if device.battery():
+			if device.battery() and device.battery() != Device.BATTERY_UNKNOWN:
 				self.debug('device %s has battery' % device.id())
 				self.discoverBattery(device)
 				result.append(self.batteryState(device))
@@ -442,14 +452,15 @@ class Client(Plugin):
 
 	def onConnect(self, client, userdata, flags, result):
 		base_topic = userdata.config('base_topic')
-		client.publish('%s/available' % (base_topic), 'online', 0, True)
-		userdata.debug('Hello from telldus, connected')
+		device_name = userdata.config('device_name')
+		client.publish('%s/%s/available' % (base_topic, device_name), 'online', 0, True)
+		userdata.debug('Hello from %s, connected!' % (device_name))
 		try:
 			userdata.debug('KnownDevices: %s' % userdata.getKnownDevices())
 			userdata.run_discovery()
 			#subscribe to commands
 			userdata.debug('subscribing')
-			client.subscribe('%s/+/telldus/+/set' % userdata.config('discovery_topic'))
+			client.subscribe('%s/+/%s/+/set' % (userdata.config('discovery_topic'), device_name))
 			userdata._ready = True
 		except Exception as e:
 			userdata.debug('OnConnect error %s' % str(e))
@@ -516,7 +527,7 @@ class Client(Plugin):
 			type, devId, deviceId = self.discoverSensor(device, valueType, scale)
 			self.addKnownDevice(type, devId, deviceId)
 		self.sensorState(device, valueType, scale)
-		if device.battery():
+		if device.battery() and device.battery() != Device.BATTERY_UNKNOWN:
 			self.batteryState(device)
 
 	@slot('deviceStateChanged')
@@ -567,9 +578,9 @@ class Client(Plugin):
 					if int(payload['brightness']) == 0:
 						device.command('turnoff', origin = 'mqtt_hass')
 					else:
-						device.command('dim', int(payload['brightness']), origin = 'mqtt_hass')
+						device.command('dim', value = int(payload['brightness']), origin = 'mqtt_hass')
 				else:
-					device.command('turnon' if payload['state'] == 'ON' else 'turnoff', origin = 'mqtt_hass')
+					device.command('turnon' if payload['state'] == 'ON' else 'turnoff', value = 255, origin = 'mqtt_hass')
 			elif deviceType == 'switch':
 				device.command('turnon' if payload == 'ON' else 'bell' if payload == 'BELL' else 'turnoff', origin = 'mqtt_hass')
 			elif deviceType == 'cover':
