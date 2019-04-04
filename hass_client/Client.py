@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
 import json
+import threading
 
 from base import \
 	Application, \
 	Plugin, \
 	Settings, \
 	configuration, \
+	ConfigurationManager, \
 	ConfigurationNumber, \
 	ConfigurationString, \
 	implements, \
@@ -67,8 +69,8 @@ ClassConverter = {
 	Device.LUMINANCE: 'illuminance'
 }
 
-def getMacAddr(ifname, compact = True):
-	addrs = netifaces.ifaddresses(ifname)
+def getMacAddr(compact = True):
+	addrs = netifaces.ifaddresses(Board.networkInterface())
 	try:
 		mac = addrs[netifaces.AF_LINK][0]['addr']
 	except (IndexError, KeyError) as e:
@@ -102,7 +104,7 @@ def getMacAddr(ifname, compact = True):
 		description='Homeassistants autodiscovery topic'
 	),
 	device_name=ConfigurationString(
-		defaultValue='telldus',
+		defaultValue='znet',
 		title='Device name',
 		description='Name of this device'
 	),
@@ -135,8 +137,15 @@ class Client(Plugin):
 
 	def onShutdown(self):
 		self._running = False
-		self.client.loop_stop()
-		self.client.disconnect()
+		self.disconnect()
+
+	def updateConfig(self):
+		self.debug('Updating config.devices_configured to : %s' % self._knownDevices)
+		try:
+			ConfigurationManager(self.context).setValue(self, 'devices_configured', self._knownDevices)
+			#self.setConfig('devices_configured', self._knownDevices)
+		except Exception as e:
+			self.debug('updateConfig error %s' % str(e))
 
 	def getKnownDevices(self):
 		if not self._knownDevices:
@@ -147,12 +156,8 @@ class Client(Plugin):
 		return self._knownDevices
 	
 	def setKnownDevices(self, devices):
-		try:
-			self.debug('Setting knownDevices to : %s' % devices)
-			self._knownDevices = devices
-			self.setConfig('devices_configured', json.dumps(devices))
-		except Exception as e:
-			self.debug('setKnownDevices error %s' % str(e))
+		self._knownDevices = devices
+		Application().queue(self.updateConfig)
 
 	def isKnownDevice(self, type, devId, deviceId):
 		devices = self.getKnownDevices()
@@ -165,7 +170,8 @@ class Client(Plugin):
 
 	def configWasUpdated(self, key, value):
 		if not key in ['devices_configured']:
-			self.connect()
+			self.disconnect()
+			Application().queue(self.connect)
 
 	def tearDown(self):
 		try:
@@ -175,6 +181,15 @@ class Client(Plugin):
 				self.client.publish('%s/state' % deviceTopic, '', retain = True)
 		except Exception as e:
 			self.debug('tearDown %s' % str(e))
+		self._knownDevices = []
+		self.updateConfig()
+		self.disconnect()
+
+	def disconnect(self):
+		#self.client.disconnect()
+		self.client.loop_stop()
+		self._running = False
+		self._ready = False
 
 	def connect(self):
 		username = self.config('username')
@@ -203,7 +218,7 @@ class Client(Plugin):
 			'%s/%s/debug' % (base_topic, device_name) if base_topic \
 			else '%s/debug' % device_name
 		)
-		self.client.publish(debugTopic, msg)
+		self.client.publish(debugTopic, 'Thread: %s, %s' % (threading.current_thread().ident, msg))
 
 	def getDeviceType(self, device):
 		capabilities = device.methods()
@@ -227,7 +242,7 @@ class Client(Plugin):
 		return '%s_%s_%s' % (deviceId, valueType, scale)
 	
 	def getBatteryId(self, device):
-		return '%s_battery' % device.id()
+		return '%s_battery' % (getMacAddr(), device.id())
 
 	def formatBattery(self, battery):
 		if battery == Device.BATTERY_LOW:
@@ -311,14 +326,14 @@ class Client(Plugin):
 		base_topic = self.config('base_topic')
 		device_name = self.config('device_name')
 		config.update({ 
-			'unique_id': '%s_%s' % (device_name, deviceId),
+			'unique_id': '%s_%s' % (getMacAddr(), deviceId),
 			'availability_topic': (
 				'%s/%s/available' % (base_topic, device_name) if base_topic \
 				else '%s/available' % device_name
 			),
 			'device': {
-				'identifiers': getMacAddr(Board.networkInterface()),
-				'connections': [['mac', getMacAddr(Board.networkInterface(), False)]],
+				'identifiers': getMacAddr(),
+				'connections': [['mac', getMacAddr(False)]],
 				'manufacturer': 'Telldus Technologies',
 				'model': Board.product(),
 				'name': 'telldus',
@@ -488,6 +503,8 @@ class Client(Plugin):
 
 	@slot('deviceAdded')
 	def onDeviceAdded(self, device):
+		if not self._running:
+			return
 		try:
 			self.debug('Device added %s' % device.id())
 			devices = self.getKnownDevices()
@@ -498,6 +515,8 @@ class Client(Plugin):
 
 	@slot('deviceRemoved')
 	def onDeviceRemoved(self, deviceId):
+		if not self._running:
+			return
 		try:
 			self.debug('Device removed %s' % deviceId)
 			devices = self.getKnownDevices()
@@ -511,6 +530,8 @@ class Client(Plugin):
 
 	@slot('deviceUpdated')
 	def onDeviceUpdated(self, device):
+		if not self._running:
+			return
 		try:
 			self.debug('Device updated %s' % device.id())
 			devices = self.getKnownDevices()
@@ -525,11 +546,13 @@ class Client(Plugin):
 
 	@slot('rf433RawData')
 	def onRawData(self, data,*__args, **__kwargs):
+		if not self._running:
+			return
 		self.debug(json.dumps(data))
 
 	@slot('sensorValueUpdated')
 	def onSensorValueUpdated(self, device, valueType, value, scale):
-		if not self._ready:
+		if not self._ready or not self._running:
 			return
 		self.debug(json.dumps({
 			'type': 'sensorValueUpdated',
@@ -550,7 +573,7 @@ class Client(Plugin):
 
 	@slot('deviceStateChanged')
 	def onDeviceStateChanged(self, device, state, stateValue, origin=None):
-		if not self._ready:
+		if not self._ready or not self._running:
 			return
 		self.debug(json.dumps({
 			'type': 'deviceStateChanged',
