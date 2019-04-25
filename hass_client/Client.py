@@ -327,7 +327,8 @@ class Client(Plugin):
 		device_name = self.config('device_name')
 		config.update({ 
 			'unique_id': '%s_%s' % (getMacAddr(), deviceId),
-			'availability_topic': (
+			'state_topic': '%s/state' % self.getDeviceTopic(type, deviceId),
+      'availability_topic': (
 				'%s/%s/available' % (base_topic, device_name) if base_topic \
 				else '%s/available' % device_name
 			),
