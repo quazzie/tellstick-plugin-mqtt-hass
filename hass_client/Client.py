@@ -3,6 +3,7 @@
 import json
 import threading
 
+# pylint: disable=no-name-in-module,import-error
 from base import \
 	Application, \
 	Plugin, \
@@ -19,6 +20,7 @@ import logging
 from board import Board
 from telldus import DeviceManager, Device
 import netifaces
+# pylint: enable=no-name-in-module,import-error
 
 __name__ = 'HASSMQTT'  # pylint: disable=W0622
 
@@ -73,7 +75,7 @@ def getMacAddr(compact = True):
 	addrs = netifaces.ifaddresses(Board.networkInterface())
 	try:
 		mac = addrs[netifaces.AF_LINK][0]['addr']
-	except (IndexError, KeyError) as e:
+	except (IndexError, KeyError):
 		return ''
 	return mac.upper().replace(':', '') if compact else mac.upper()
 
@@ -129,21 +131,20 @@ class Client(Plugin):
 		self._knownDevices = None
 		Application().registerShutdown(self.onShutdown)
 		self.client = mqtt.Client(userdata = self)
-		self.client_on_disconnect = self.onDisconnect
+		self.client.on_disconnect = self.onDisconnect
 		self.client.on_connect = self.onConnect
 		self.client.on_message = self.onMessage
-		if self.config('hostname') != '':
+		if self.config('hostname'):
 			Application().queue(self.connect)
 
 	def onShutdown(self):
-		self._running = False
+		self._running = False 
 		self.disconnect()
 
 	def updateConfig(self):
 		self.debug('Updating config.devices_configured to : %s' % self._knownDevices)
 		try:
-			ConfigurationManager(self.context).setValue(self, 'devices_configured', self._knownDevices)
-			#self.setConfig('devices_configured', self._knownDevices)
+			self.setConfig('devices_configured', self._knownDevices)
 		except Exception as e:
 			self.debug('updateConfig error %s' % str(e))
 
@@ -157,7 +158,7 @@ class Client(Plugin):
 	
 	def setKnownDevices(self, devices):
 		self._knownDevices = devices
-		Application().queue(self.updateConfig)
+		self.updateConfig()
 
 	def isKnownDevice(self, type, devId, deviceId):
 		devices = self.getKnownDevices()
@@ -175,7 +176,7 @@ class Client(Plugin):
 
 	def tearDown(self):
 		try:
-			for type, id, fullId in self.getKnownDevices():
+			for type, _, fullId in self.getKnownDevices():
 				deviceTopic = self.getDeviceTopic(type, fullId)
 				self.client.publish('%s/config' % deviceTopic, '', retain = True)
 				self.client.publish('%s/state' % deviceTopic, '', retain = True)
@@ -198,7 +199,7 @@ class Client(Plugin):
 		device_name = self.config('device_name')
 		hostname = self.config('hostname')
 		port = self.config('port')
-		
+
 		if username != '':
 			self.client.username_pw_set(username, password)
 		self.client.will_set(
@@ -212,6 +213,7 @@ class Client(Plugin):
 		self.client.loop_start()
 
 	def debug(self, msg):
+		logging.info('HASS DBG: %s', msg)
 		base_topic = self.config('base_topic')
 		device_name = self.config('device_name')
 		debugTopic = (
@@ -242,7 +244,7 @@ class Client(Plugin):
 		return '%s_%s_%s' % (deviceId, valueType, scale)
 	
 	def getBatteryId(self, device):
-		return '%s_battery' % (getMacAddr(), device.id())
+		return '%s_%s_battery' % (getMacAddr(), device.id())
 
 	def formatBattery(self, battery):
 		if battery == Device.BATTERY_LOW:
@@ -292,7 +294,7 @@ class Client(Plugin):
 			if state == Device.BELL:
 				self.client.publish(stateTopic, 'OFF', retain = True)
 		except Exception as e:
-			self.debug('deviceState exception %s' % e.message)
+			self.debug('deviceState exception %s' % str(e))
 
 	def sensorState(self, device, valueType, scale):
 		try:
@@ -310,7 +312,7 @@ class Client(Plugin):
 						retain = True
 					)
 		except Exception as e:
-			self.debug('sensorState exception %s' % e.message)
+			self.debug('sensorState exception %s' % str(e))
 	
 	def batteryState(self, device):
 		try:
@@ -320,15 +322,15 @@ class Client(Plugin):
 				retain = True
 			)
 		except Exception as e:
-			self.debug('batteryState exception %s' % e.message)
+			self.debug('batteryState exception %s' % str(e))
 
-	def discover(self, device, type, deviceId, config):
+	def publish_discovery(self, device, type, deviceId, config):
 		base_topic = self.config('base_topic')
 		device_name = self.config('device_name')
 		config.update({ 
 			'unique_id': '%s_%s' % (getMacAddr(), deviceId),
 			'state_topic': '%s/state' % self.getDeviceTopic(type, deviceId),
-      'availability_topic': (
+			'availability_topic': (
 				'%s/%s/available' % (base_topic, device_name) if base_topic \
 				else '%s/available' % device_name
 			),
@@ -338,7 +340,7 @@ class Client(Plugin):
 				'manufacturer': 'Telldus Technologies',
 				'model': Board.product(),
 				'name': 'telldus',
-				'sw_version': Board.firmwareVersion(),
+				'sw_version': Board.firmwareVersion()
 			} 
 		})
 		self.client.publish(
@@ -348,9 +350,9 @@ class Client(Plugin):
 		)
 		return (type, str(device.id()), str(deviceId))
 
-	def undiscover(self, type, devId, fullId):
+	def remove_discovery(self, type, devId, fullId):
 		deviceTopic = self.getDeviceTopic(type, fullId)
-		self.debug('undiscover device %s,%s,%s : %s' % (type, devId, fullId, deviceTopic))
+		self.debug('remove discovered device %s,%s,%s : %s' % (type, devId, fullId, deviceTopic))
 		self.client.publish('%s/config' % deviceTopic, '', retain = True)
 		self.client.publish('%s/state' % deviceTopic, '', retain = True)
 
@@ -361,7 +363,7 @@ class Client(Plugin):
 				'unit_of_measurement': '%',
 				'device_class': 'battery'
 			}
-			return self.discover(device, 'sensor', self.getBatteryId(device), sensorConfig)
+			return self.publish_discovery(device, 'sensor', self.getBatteryId(device), sensorConfig)
 		except Exception as e:
 			self.debug('discoverBattery %s' % str(e))
 
@@ -384,7 +386,7 @@ class Client(Plugin):
 				})
 
 			sensorId = self.getSensorId(device.id(), valueType, scale)
-			return self.discover(device, 'sensor', sensorId, sensorConfig)
+			return self.publish_discovery(device, 'sensor', sensorId, sensorConfig)
 		except Exception as e:
 			self.debug('discoverSensor %s' % str(e))
 
@@ -417,7 +419,7 @@ class Client(Plugin):
 				'deviceConfig': deviceConfig
 			}))
 
-			return self.discover(device, deviceType, device.id(), deviceConfig)
+			return self.publish_discovery(device, deviceType, device.id(), deviceConfig)
 		except Exception as e:
 			self.debug('discoverDevice %s' % str(e))
 
@@ -463,20 +465,20 @@ class Client(Plugin):
 						'methods': device.methods(),
 						'battery': device.battery(),
 						'parameters': device.allParameters() if hasattr(device, 'allParameters') else device.parameters(),
-						'type': device.typeString(),
+						'typeStr': device.typeString(),
 						'sensors': device.sensorValues(),
 						'state': device.state()
 					}))
 					publishedDevices.extend(self.discovery(device))
 				except Exception as e:
-					self.debug('run_discovery device exception %s' % e.message)
+					self.debug('run_discovery device exception %s' % str(e))
 
 			for type, devId, fullId in list(set(self.getKnownDevices()) - set(publishedDevices)):
-				self.undiscover(type, devId, fullId)
+				self.remove_discovery(type, devId, fullId)
 
 			self.setKnownDevices(publishedDevices)
 		except Exception as e:
-			self.debug('run_discovery exception %s' % e.message)
+			self.debug('run_discovery exception %s' % str(e))
 
 	def onConnect(self, client, userdata, flags, result):
 		base_topic = userdata.config('base_topic')
@@ -488,9 +490,7 @@ class Client(Plugin):
 			0, 
 			True
 		)
-		userdata.debug('Hello from %s, connected!' % (device_name))
 		try:
-			userdata.debug('KnownDevices: %s' % userdata.getKnownDevices())
 			userdata.run_discovery()
 			#subscribe to commands
 			userdata.debug('subscribing')
@@ -500,6 +500,7 @@ class Client(Plugin):
 			userdata.debug('OnConnect error %s' % str(e))
 
 	def onDisconnect(self, client, userdata, rc):
+		self.debug("Mqtt disconnected")
 		userdata._ready = False
 
 	@slot('deviceAdded')
@@ -523,7 +524,7 @@ class Client(Plugin):
 			devices = self.getKnownDevices()
 			for type, devId, fullId in devices:
 				if devId == str(deviceId):
-					self.undiscover(type, devId, fullId)
+					self.remove_discovery(type, devId, fullId)
 			devices = [x for x in devices if x[1] != str(deviceId)]
 			self.setKnownDevices(devices)
 		except Exception as e:
@@ -537,8 +538,8 @@ class Client(Plugin):
 			self.debug('Device updated %s' % device.id())
 			devices = self.getKnownDevices()
 			for type, devId, fullId in devices:
-				if devId == str(deviceId):
-					self.undiscover(type, devId, fullId)
+				if devId == str(device.id()):
+					self.remove_discovery(type, devId, fullId)
 			devices = [x for x in devices if x[1] != str(device.id())]
 			devices.extend(self.discovery(device))
 			self.setKnownDevices(devices)
@@ -596,10 +597,10 @@ class Client(Plugin):
 
 	def onMessage(self, client, userdata, msg):
 		try:
-			topic = msg.topic
+			#topic = msg.topic
 			payload = msg.payload
 
-			topicType = topic.split('/')[-1]
+			#topicType = topic.split('/')[-1]
 			deviceManager = DeviceManager(userdata.context)
 			
 			device_id = int(msg.topic.split('/')[-2])
@@ -631,7 +632,7 @@ class Client(Plugin):
 						)
 				else:
 					device.command(
-						Device.TURNON if payload['state'] == 'ON' \
+						Device.TURNON if payload['state'].upper() == 'ON' \
 						else Device.TURNOFF, 
 						value = 255, 
 						origin = 'mqtt_hass'
@@ -639,20 +640,20 @@ class Client(Plugin):
 
 			elif deviceType == 'switch':
 				device.command(
-					Device.TURNON if payload == 'ON' \
-					else Device.BELL if payload == 'BELL' \
+					Device.TURNON if payload.upper() == 'ON' \
+					else Device.BELL if payload.upper() == 'BELL' \
 					else Device.TURNOFF, 
 					origin = 'mqtt_hass'
 				)
 
 			elif deviceType == 'cover':
 				device.command(
-					Device.UP if payload == 'OPEN' \
-					else Device.DOWN if payload == 'CLOSE' else \
+					Device.UP if payload.upper() == 'OPEN' \
+					else Device.DOWN if payload.upper() == 'CLOSE' else \
 					Device.STOP, 
 					origin = 'mqtt_hass'
 				)
 		except Exception as e:
-			userdata.debug('onMessage exception %s' % e.message)
+			userdata.debug('onMessage exception %s' % str(e))
 
 	
