@@ -1,5 +1,7 @@
-# tellstick-plugin-mqtt-hass
-Plugin for tellstick, connect to homeassistant via mqtt with autodiscovery.
+# TellStick mqtt-plugin for HomeAssistant
+<img src="https://img.shields.io/github/v/release/quazzie/tellstick-plugin-mqtt-hass?include_prereleases" /> <img src="https://img.shields.io/github/release-date-pre/quazzie/tellstick-plugin-mqtt-hass" /> <img src="https://img.shields.io/github/commits-since/quazzie/tellstick-plugin-mqtt-hass/latest" /> <img src="https://img.shields.io/github/downloads/quazzie/tellstick-plugin-mqtt-hass/total" />
+
+Plugin for **TellStick Znet v2** to support MQTT push/subscribe, enables [Home Assistant](https://home-assistant.io) integration via mqtt autodiscovery.
 
 ## Usage instruction
 
