@@ -228,14 +228,14 @@ class Client(Plugin):
 		self.client.loop_start()
 
 	def debug(self, msg):
-		logging.info('HASS DBG: %s', msg)
+		# logging.info('HASS DBG: %s', msg)
 		base_topic = self.config('base_topic')
 		device_name = self.config('device_name')
 		debugTopic = (
 			'%s/%s/debug' % (base_topic, device_name) if base_topic \
 			else '%s/debug' % device_name
 		)
-		self.client.publish(debugTopic, 'Thread: %s, %s' % (threading.current_thread().ident, msg))
+		self.client.publish(debugTopic, '%s' % msg)
 
 	def getDeviceType(self, device):
 		capabilities = device.methods()
