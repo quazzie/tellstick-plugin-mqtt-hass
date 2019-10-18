@@ -115,6 +115,11 @@ def getMacAddr(compact = True):
 		title='Base topic',
 		description='Base topic for this device'
 	),
+	state_retain=ConfigurationNumber(
+		defaultValue=1,
+		title='Retain state changes, 1 = yes, 0 = no',
+		description='Post state changes with retain'
+	),
 	devices_configured=ConfigurationString(
 		defaultValue='',
 		hidden=True,
@@ -170,7 +175,17 @@ class Client(Plugin):
 		self.setKnownDevices(devices)
 
 	def configWasUpdated(self, key, value):
-		if not key in ['devices_configured']:
+		self.debug('config updated %s %s' % (key, value))
+		if key == 'state_retain' and value == '0':
+			# clear retained messages
+			try:
+				for type, _, fullId in self.getKnownDevices():
+					deviceTopic = self.getDeviceTopic(type, fullId)
+					self.debug('clear retain for %s/state' % deviceTopic)
+					self.client.publish('%s/state' % deviceTopic, None, retain = True)
+			except Exception as e:
+				self.debug('clear retain error %s' % str(e))
+		if not key in ['devices_configured', 'state_retain']:
 			self.disconnect()
 			Application().queue(self.connect)
 
@@ -290,9 +305,10 @@ class Client(Plugin):
 			elif deviceType in ['cover']:
 				payload = 'OPEN' if state == Device.UP else 'CLOSED' if state == Device.DOWN else 'STOP'
 
-			self.client.publish(stateTopic, payload, retain = True)
+			use_retain = self.config('state_retain') == 1
+			self.client.publish(stateTopic, payload, retain = use_retain)
 			if state == Device.BELL:
-				self.client.publish(stateTopic, 'OFF', retain = True)
+				self.client.publish(stateTopic, 'OFF', retain = use_retain)
 		except Exception as e:
 			self.debug('deviceState exception %s' % str(e))
 
