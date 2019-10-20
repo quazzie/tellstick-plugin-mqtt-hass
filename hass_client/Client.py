@@ -239,7 +239,10 @@ class Client(Plugin):
 
 	def getDeviceType(self, device):
 		capabilities = device.methods()
-		if capabilities & Device.DIM:
+		devicetype = device.allParameters().get('devicetype')
+		if devicetype == Device.TYPE_REMOTE_CONTROL:
+			return 'remote'
+		elif capabilities & Device.DIM:
 			return 'light'
 		elif capabilities & Device.TURNON:
 			return 'switch'
@@ -253,6 +256,8 @@ class Client(Plugin):
 	def getDeviceTopic(self, type, id):
 		discoverTopic = self.config('discovery_topic')
 		telldusName = self.config('device_name') or 'telldus'
+		if type in ['remote']:
+			type = 'binary_sensor'
 		return '%s/%s/%s/%s' % (discoverTopic, type, telldusName, id)
 
 	def getSensorId(self, deviceId, valueType, scale):
@@ -287,6 +292,7 @@ class Client(Plugin):
 			stateTopic = '%s/state' % self.getDeviceTopic(deviceType, device.id())
 			payload = ''
 
+			retain = True
 			if deviceType in ['light']:
 				if state == Device.DIM:
 					payload = json.dumps({
@@ -298,6 +304,9 @@ class Client(Plugin):
 						'state': 'ON' if state == Device.TURNON else 'OFF',
 						'brightness': (int(stateValue) if stateValue else 255) if state == Device.TURNON else 0
 					})
+			elif deviceType in ['remote']:
+				payload = 'ON' if state in [Device.TURNON] else 'OFF'
+				retain = False
 			elif deviceType in ['switch']:
 				payload = 'ON' if state in [Device.TURNON, Device.BELL] else 'OFF' 
 			elif deviceType in ['binary_sensor']:
@@ -305,7 +314,7 @@ class Client(Plugin):
 			elif deviceType in ['cover']:
 				payload = 'OPEN' if state == Device.UP else 'CLOSED' if state == Device.DOWN else 'STOP'
 
-			use_retain = self.config('state_retain') == 1
+			use_retain = retain and (self.config('state_retain') == 1)
 			self.client.publish(stateTopic, payload, retain = use_retain)
 			if state == Device.BELL:
 				self.client.publish(stateTopic, 'OFF', retain = use_retain)
@@ -415,6 +424,10 @@ class Client(Plugin):
 			deviceTopic = self.getDeviceTopic(deviceType, device.id())
 			deviceConfig = { 'name': device.name() }
 
+			if deviceType in ['remote']:
+				deviceConfig.update({
+					'expire_after': 1
+				})
 			if deviceType in ['switch', 'light', 'cover']:
 				deviceConfig.update({
 					'command_topic': '%s/set' % deviceTopic
@@ -593,14 +606,15 @@ class Client(Plugin):
 	def onDeviceStateChanged(self, device, state, stateValue, origin=None):
 		if not self._ready or not self._running:
 			return
+		deviceType = self.getDeviceType(device)
 		self.debug(json.dumps({
 			'type': 'deviceStateChanged',
 			'deviceId': device.id(),
 			'state': state,
 			'stateValue': stateValue,
-			'origin': origin
+			'origin': origin,
+			'devicetype': deviceType
 		}))
-		deviceType = self.getDeviceType(device)
 		if not deviceType:
 			return
 		if not self.isKnownDevice(deviceType, device.id(), device.id()):
