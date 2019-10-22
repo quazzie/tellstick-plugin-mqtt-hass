@@ -470,8 +470,10 @@ class Client(Plugin):
 
 			if device.isDevice():
 				self.debug('device %s is a device' % device.id())
-				result.append(self.discoverDevice(device))
-				self.deviceState(device)
+				item = self.discoverDevice(device)
+				result.append(item)
+				if item[0] != "remote":
+					self.deviceState(device)
 		except Exception as e:
 			self.debug('discovery %s' % str(e))
 		return [x for x in result if x]
