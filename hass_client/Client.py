@@ -277,7 +277,7 @@ class Client(Plugin):
 
   def getSensorId(self, deviceId, valueType, scale):
     return '%s_%s_%s' % (deviceId, valueType, scale)
-  
+
   def getBatteryId(self, device):
     return '%s_%s_battery' % (getMacAddr(), device.id())
 
@@ -394,13 +394,13 @@ class Client(Plugin):
             'lastUpdated': sensor.get('lastUpdated')
           }
           self.client.publish(
-            '%s/state' % self.getDeviceTopic('sensor', sensorId), 
+            '%s/state' % self.getDeviceTopic('sensor', sensorId),
             json.dumps(payload),
             retain = True
           )
     except Exception as e:
       self.debug('sensorState exception %s' % str(e))
-  
+
   def batteryState(self, device):
     try:
       self.client.publish(
@@ -442,17 +442,6 @@ class Client(Plugin):
     self.client.publish('%s/config' % deviceTopic, '', retain = True)
     self.client.publish('%s/state' % deviceTopic, '', retain = True)
 
-  def discoverBattery(self, device):
-    try:
-      sensorConfig = {
-        'name': '%s - Battery' % device.name(),
-        'unit_of_measurement': '%',
-        'device_class': 'battery'
-      }
-      return self.publish_discovery(device, 'sensor', self.getBatteryId(device), sensorConfig)
-    except Exception as e:
-      self.debug('discoverBattery %s' % str(e))
-
   def discoverClimate(self, device):
     deviceTopic = self.getDeviceTopic('climate', device.id())
     try:
@@ -490,14 +479,27 @@ class Client(Plugin):
         })
 
       self.client.publish(
-        '%s/attr' % deviceTopic, 
+        '%s/attr' % deviceTopic,
         json.dumps({ 'modes': availModes }),
         retain = True
       )
-        
+
       return self.publish_discovery(device, 'climate', device.id(), climateConfig)
     except Exception as e:
       self.debug('discoverThermostat %s' % str(e))
+
+  def discoverBattery(self, device):
+    deviceTopic = self.getDeviceTopic('sensor', getBatteryId(device))
+    try:
+      sensorConfig = {
+        'name': '%s - Battery' % device.name(),
+        'unit_of_measurement': '%',
+        'device_class': 'battery',
+        'state_topic': '%s/state' % deviceTopic
+      }
+      return self.publish_discovery(device, 'sensor', self.getBatteryId(device), sensorConfig)
+    except Exception as e:
+      self.debug('discoverBattery %s' % str(e))
 
   def discoverSensor(self, device, valueType, scale):
     sensorId = self.getSensorId(device.id(), valueType, scale)
