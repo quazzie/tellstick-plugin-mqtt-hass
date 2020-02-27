@@ -13,9 +13,15 @@ Open a support request stating that you like an updated Firmware with support fo
 
 Once the support request is accepted log in to your TellStick Znet v2 (http://tellstick.local) using your Telldus Live credentials. When logged in go to `Plugins (beta)` and from that click `Manual upload` (:arrow_up:) and upload the downloaded package (from https://github.com/quazzie/tellstick-plugin-mqtt-hass/releases).
 
-**Reboot after install**.
+**Reboot after install**
 
-Configure the plugin with your mqtt sessings and if your Home Assistant is configured to support auto discovery via [mqtt](https://www.home-assistant.io/integrations/mqtt) the devices connected to your TellStick will automatically show up in Home Assistant.
+Configure the plugin with your mqtt settings and if your Home Assistant is configured to support auto discovery via [mqtt](https://www.home-assistant.io/integrations/mqtt) the devices connected to your TellStick will automatically show up in Home Assistant.
+
+**Support / thanks**
+
+Help support or thank me:
+* [buy me a ~~coffee~~ beer](https://www.buymeacoffee.com/quazzie)
+* [flattr](https://flattr.com/github/quazzie)
 
 ```key
 -----BEGIN PGP PUBLIC KEY BLOCK----
