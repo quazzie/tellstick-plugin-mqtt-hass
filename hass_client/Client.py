@@ -414,15 +414,16 @@ class Client(Plugin):
   def publish_discovery(self, device, type, deviceId, config):
     base_topic = self.config('base_topic')
     device_name = self.config('device_name')
-    config.update({ 
-      'unique_id': '%s_%s' % (device.getOrCreateUUID(), deviceId),
+    config.update({
+      'unique_id': '%s_%s' % (getMacAddr(), deviceId),
       'availability_topic': (
         '%s/%s/available' % (base_topic, device_name) if base_topic \
         else '%s/available' % device_name
       ),
       'device': {
         'identifiers': device.getOrCreateUUID(),
-        'model': device.model(),  # Model is always 'n/a' but is supposed to be updated.
+        'manufacturer': device.protocol().title(),
+        'model': device.model().title(),  # Model is always 'n/a' but is supposed to be updated.
         'name': device.name(),
         'via_hub': getMacAddr(),
       }
@@ -608,8 +609,6 @@ class Client(Plugin):
       'payload_on': 'online',
       'payload_off': 'offline',
       'device_class': 'connectivity',
-    }
-    config.update({
       'unique_id': '%s_%s' % (getMacAddr(), deviceId),
       'availability_topic': (
         '%s/%s/available' % (base_topic, device_name) if base_topic \
@@ -619,13 +618,13 @@ class Client(Plugin):
         'identifiers': getMacAddr(),
         'connections': [['mac', getMacAddr(False)]],
         'manufacturer': 'Telldus Technologies',
-        'model': Board.product(),
+        'model': Board.product().replace('-', ' ').title().replace(' ', '_'),
         'name': device_name,
         'sw_version': Board.firmwareVersion()
       }
-    })
+    }
     self.client.publish(
-      '%s/config' % self.getDeviceTopic(type, deviceId),
+      '%s/config' % self.getDeviceTopic('binary_sensor', deviceId),
       json.dumps(config),
       retain = True
     )
