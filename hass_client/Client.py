@@ -415,19 +415,17 @@ class Client(Plugin):
     base_topic = self.config('base_topic')
     device_name = self.config('device_name')
     config.update({ 
-      'unique_id': '%s_%s' % (getMacAddr(), deviceId),
+      'unique_id': '%s_%s' % (device.getOrCreateUUID(), deviceId),
       'availability_topic': (
         '%s/%s/available' % (base_topic, device_name) if base_topic \
         else '%s/available' % device_name
       ),
       'device': {
-        'identifiers': getMacAddr(),
-        'connections': [['mac', getMacAddr(False)]],
-        'manufacturer': 'Telldus Technologies',
-        'model': Board.product(),
-        'name': device_name,
-        'sw_version': Board.firmwareVersion()
-      } 
+        'identifiers': device.getOrCreateUUID(),
+        'model': device.model(),  # Model is always 'n/a' but is supposed to be updated.
+        'name': device.name(),
+        'via_hub': getMacAddr(),
+      }
     })
     self.client.publish(
       '%s/config' % self.getDeviceTopic(type, deviceId), 
@@ -597,11 +595,48 @@ class Client(Plugin):
       self.debug('discovery %s' % str(e))
     return [x for x in result if x]
 
+  def publish_hub_device(self):
+    base_topic = self.config('base_topic')
+    device_name = self.config('device_name')
+    deviceId = 'hub'
+    config = {
+      'name': device_name,
+      'state_topic': (
+        '%s/%s/available' % (base_topic, device_name) if base_topic \
+        else '%s/available' % device_name
+      ),
+      'payload_on': 'online',
+      'payload_off': 'offline',
+      'device_class': 'connectivity',
+    }
+    config.update({
+      'unique_id': '%s_%s' % (getMacAddr(), deviceId),
+      'availability_topic': (
+        '%s/%s/available' % (base_topic, device_name) if base_topic \
+        else '%s/available' % device_name
+      ),
+      'device': {
+        'identifiers': getMacAddr(),
+        'connections': [['mac', getMacAddr(False)]],
+        'manufacturer': 'Telldus Technologies',
+        'model': Board.product(),
+        'name': device_name,
+        'sw_version': Board.firmwareVersion()
+      }
+    })
+    self.client.publish(
+      '%s/config' % self.getDeviceTopic(type, deviceId),
+      json.dumps(config),
+      retain = True
+    )
+    return (deviceId, deviceId, deviceId)
+
+
   def run_discovery(self):
     self.debug('discover devices')
     try:
       # publish devices
-      publishedDevices = []
+      publishedDevices = [self.publish_hub_device()]
       deviceManager = DeviceManager(self.context)
       devices = deviceManager.retrieveDevices()
       for device in devices:
