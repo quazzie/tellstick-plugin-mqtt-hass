@@ -425,7 +425,7 @@ class Client(Plugin):
         'manufacturer': device.protocol().title(),
         'model': device.model().title(),  # Model is always 'n/a' but is supposed to be updated.
         'name': device.name(),
-        'via_hub': getMacAddr(),
+        'via_device': getMacAddr(),
       }
     })
     self.client.publish(
