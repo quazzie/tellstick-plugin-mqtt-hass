@@ -86,6 +86,10 @@ def getMacAddr(compact = True):
     return ''
   return mac.upper().replace(':', '') if compact else mac.upper()
 
+def slugify(value):
+  allowed_chars = set('_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
+  return filter(lambda x: x in allowed_chars, value.replace(' ', '_').replace('-', '_'))
+
 @configuration(
   username = ConfigurationString(
     defaultValue='',
@@ -148,6 +152,15 @@ class Client(Plugin):
     self.client.on_message = self.onMessage
     if self.config('hostname'):
       Application().queue(self.connect)
+
+  def getSlugifiedConfig(self, name):
+    return slugify(self.config(name))
+
+  def getBaseTopic(self):
+    return self.getSlugifiedConfig('base_topic')
+
+  def getDeviceName(self):
+    return self.getSlugifiedConfig('device_name')
 
   def onShutdown(self):
     self._running = False 
@@ -222,8 +235,8 @@ class Client(Plugin):
   def connect(self):
     username = self.config('username')
     password = self.config('password')
-    base_topic = self.config('base_topic')
-    device_name = self.config('device_name')
+    base_topic = self.getBaseTopic()
+    device_name = self.getDeviceName()
     hostname = self.config('hostname')
     port = self.config('port')
 
@@ -241,8 +254,8 @@ class Client(Plugin):
 
   def debug(self, msg):
     logging.info('HASS DBG: %s', msg)
-    base_topic = self.config('base_topic')
-    device_name = self.config('device_name')
+    base_topic = self.getBaseTopic()
+    device_name = self.getDeviceName()
     debugTopic = (
       '%s/%s/debug' % (base_topic, device_name) if base_topic \
       else '%s/debug' % device_name
@@ -269,17 +282,17 @@ class Client(Plugin):
       return 'binary_sensor'
 
   def getDeviceTopic(self, type, id):
-    discoverTopic = self.config('discovery_topic')
-    telldusName = self.config('device_name') or 'telldus'
+    discoverTopic = self.getSlugifiedConfig('discovery_topic')
+    telldusName = self.getDeviceName() or 'telldus'
     if type in ['remote']:
       type = 'binary_sensor'
     return '%s/%s/%s/%s' % (discoverTopic, type, telldusName, id)
 
   def getSensorId(self, deviceId, valueType, scale):
-    return '%s_%s_%s' % (deviceId, valueType, scale)
+    return slugify('%s_%s_%s' % (deviceId, valueType, scale))
 
   def getBatteryId(self, device):
-    return '%s_%s_battery' % (getMacAddr(), device.id())
+    return slugify('%s_%s_battery' % (getMacAddr(), device.id()))
 
   def formatBattery(self, battery):
     return {
@@ -412,8 +425,8 @@ class Client(Plugin):
       self.debug('batteryState exception %s' % str(e))
 
   def publish_discovery(self, device, type, deviceId, config):
-    base_topic = self.config('base_topic')
-    device_name = self.config('device_name')
+    base_topic = self.getBaseTopic()
+    device_name = self.getDeviceName()
     config.update({
       'unique_id': '%s_%s' % (getMacAddr(), deviceId),
       'availability_topic': (
@@ -597,8 +610,8 @@ class Client(Plugin):
     return [x for x in result if x]
 
   def publish_hub_device(self):
-    base_topic = self.config('base_topic')
-    device_name = self.config('device_name')
+    base_topic = self.getBaseTopic()
+    device_name = self.getDeviceName()
     deviceId = 'hub'
     config = {
       'name': device_name,
