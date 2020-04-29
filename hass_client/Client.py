@@ -501,7 +501,7 @@ class Client(Plugin):
       self.debug('discoverThermostat %s' % str(e))
 
   def discoverBattery(self, device):
-    deviceTopic = self.getDeviceTopic('sensor', getBatteryId(device))
+    deviceTopic = self.getDeviceTopic('sensor', self.getBatteryId(device))
     try:
       sensorConfig = {
         'name': '%s - Battery' % device.name(),
