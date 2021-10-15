@@ -1,5 +1,1 @@
-<<<<<<< HEAD
 paho-mqtt
-=======
-paho-mqtt
->>>>>>> rewrite

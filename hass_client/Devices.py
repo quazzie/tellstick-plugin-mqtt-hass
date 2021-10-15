@@ -393,7 +393,7 @@ class HaSensor(HaDevice):
         })
         devClass = sensorTypeIntToDeviceClass(self.sensorType, self.sensorScale)
         if devClass:
-            sConf.update({ 'device_class': devClass })
+            sConf.update({'device_class': devClass})
         return sConf
 
 
