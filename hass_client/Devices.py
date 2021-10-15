@@ -133,15 +133,16 @@ class HaCover(HaDevice):
                 'closed' if state == Device.DOWN else \
                 'stopped'
 
-    # def getConfig(self, hub, useVia):
-    #    sConf = HaDevice.getConfig(self, hub, useVia).copy()
-    #    sConf.update({
-    #        'position_topic': '%s/state' % self.getDeviceTopic(),
-    #        'set_position_topic': '%s/set' % self.getDeviceTopic(),
-    #        'position_open': 0,
-    #        'position_closed': 255
-    #    })
-    #    return sConf
+    def getConfig(self, hub, useVia):
+        sConf = HaDevice.getConfig(self, hub, useVia).copy()
+        if self.device.methods() & Device.DIM:
+            sConf.update({
+                'position_topic': '%s/state' % self.getDeviceTopic(),
+                'set_position_topic': '%s/pos' % self.getDeviceTopic(),
+                'position_open': 0,
+                'position_closed': 255
+            })
+        return sConf
 
     def runCommand(self, topic, command):
         HaDevice._runCommand(self, topic, command)
@@ -416,7 +417,7 @@ def createDevices(device, buildTopic):
             result.append(HaClimate(device, buildTopic, [x for x in result if isinstance(x, HaSensor)]))
         elif devType == Device.TYPE_REMOTE_CONTROL:
             result.append(HaRemote(device, buildTopic))
-        elif caps & Device.UP and caps & Device.DOWN:
+        elif devType == Device.TYPE_WINDOW_COVERING or caps & Device.UP and caps & Device.DOWN:
             result.append(HaCover(device, buildTopic))
         elif devType == Device.TYPE_LIGHT or caps & Device.DIM:
             result.append(HaLight(device, buildTopic))
