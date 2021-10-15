@@ -24,7 +24,7 @@ Help support or thank me:
 * [flattr](https://flattr.com/github/quazzie)
 
 ```key
------BEGIN PGP PUBLIC KEY BLOCK----
+-----BEGIN PGP PUBLIC KEY BLOCK-----
 
 mQINBFt8ACUBEADGde8BPTcDRFv6vZ356aEiq6YKZhrQCgzlXdrdJh6lXENPKEmN
 5PBz/xjubNoLff4zlusaSKso2L6xG0PkSqXanLYAQUIB8TfML01gaBtmO+tIkHZP
