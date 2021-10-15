@@ -231,107 +231,78 @@ class HaClimate(HaDevice):
     def getType(self):
         return 'hvac'
 
-    def getClimateModes(self):
+    def _getThermostat(self):
         params = self.device.allParameters() if hasattr(self.device, 'allParameters') else self.device.parameters()
-        modes = params.get('thermostat', {}).get('modes', ['auto'])
-        return modes
+        return params.get('thermostat', {})
 
-    def getClimateMode(self):
-        #state, stateValue = device.state()
-        thermoValues = self.device.stateValue(Device.THERMOSTAT)
-        availModes = self.getClimateModes()
-        return thermoValues.get('mode') or availModes[0]
+    def _getModes(self):
+        return self._getThermostat().get('modes', [])
 
-    def getClimateSetPoint(self, mode=None):
-        thermoValues = self.device.stateValue(Device.THERMOSTAT)
-        setpoint = thermoValues.get('setpoint')
-        if isinstance(setpoint, dict) and mode:
-            setpoint = setpoint.get(mode)
-        return setpoint
+    def _getSetPoints(self):
+        return self._getThermostat().get('setpoints', {})
 
     def getState(self):
-        #thermoValues = self.device.stateValue(Device.THERMOSTAT)
-        sensorValues = self.device.sensorValues()
-        tempValues = sensorValues[Device.TEMPERATURE]
-        mode = self.getClimateMode()
-        setpoint = self.getClimateSetPoint(mode)
+        temp = self.device.sensorValue(Device.TEMPERATURE, Device.SCALE_TEMPERATURE_CELCIUS) or self.device.sensorValue(
+            Device.TEMPERATURE, Device.SCALE_TEMPERATURE_FAHRENHEIT)
+        thermoValues = self.device.stateValue(Device.THERMOSTAT, {})
+        mode = thermoValues.get('mode', None)
+        setPoint = thermoValues.get('setpoint', {})
+        modeTemp = setPoint.get(mode, None)
 
-        result = {
-            'setpoint': setpoint,
-            'mode': {Thermostat.MODE_FAN: 'fan_only'}.get(mode, mode),
-        }
-
-        if self.device.isSensor() and sensorValues[Device.TEMPERATURE]:
-            value = tempValues[0] if isinstance(tempValues, list) else tempValues
-            result.update({'temperature': value.get('value')})
-
-        return json.dumps(result)
+        return json.dumps({
+            'temperature': temp,
+            'setpoint': modeTemp,
+            'mode': mode
+        })
 
     def getConfig(self, hub, useVia):
         sConf = HaDevice.getConfig(self, hub, useVia)
-        sConf.update({
-            'temperature_command_topic': '%s/set/setpoint' % self.getDeviceTopic(),
-            'json_attributes_topic': '%s/attr' % self.getDeviceTopic(),
-            'json_attributes_template': '{{ json_value }}'
-        })
 
-        sensorValues = self.device.sensorValues()
-        thermoValues = self.device.stateValue(Device.THERMOSTAT)
-        params = self.device.allParameters() if hasattr(self.device, 'allParameters') else self.device.parameters()
-        modes = params.get('thermostat', {}).get('modes', ['auto'])
-
-        if self.device.isSensor() and sensorValues[Device.TEMPERATURE]:
-            existingSensor = next((x for x in self.sensors if x.device.id() ==
-                                  self.device.id() and x.sensorType == Device.TEMPERATURE), None)
-            sConf.update({
-                'current_temperature_topic': '%s/state' % ((existingSensor or self).getDeviceTopic()),
-                'current_temperature_template': '{{ value_json.temperature }}',
-                'unit_of_measurement': sensorScaleIntToStr(Device.TEMPERATURE, sensorValues[Device.TEMPERATURE]['scale'])
-            })
-
-        if modes:
+        modes = self._getModes()
+        if len(modes) > 0:
             sConf.update({
                 'modes': modes,
-                'mode_command_topic': '%s/set/mode' % self.getDeviceTopic(),
                 'mode_state_topic': '%s/state' % self.getDeviceTopic(),
-                'mode_state_template': '{{ value_json.mode }}'
+                'mode_state_template': '{{ value_json.mode }}',
+                'mode_command_topic': '%s/setMode' % self.getDeviceTopic()
             })
 
-        if thermoValues.get('setpoint', None) is not None:
+        setPoints = self._getSetPoints()
+        if len(setPoints) > 0:
             sConf.update({
                 'temperature_state_topic': '%s/state' % self.getDeviceTopic(),
-                'temperature_state_template': '{{ value_json.setpoint }}'
+                'temperature_state_template': '{{ value_json.setpoint }}',
+                'temperature_command_topic': '%s/setPoint' % self.getDeviceTopic()
             })
+
+        if self.device.isSensor():
+            sensorValues = self.device.sensorValues().get(Device.TEMPERATURE, [])
+            tempValue = next(sensorValues, None)
+            if tempValue:
+                sConf.update({
+                    'current_temperature_topic': '%s/state' % self.getDeviceTopic(),
+                    'current_temperature_template': '{{ value_json.temperature }}',
+                    'unit_of_measurement': sensorScaleIntToStr(Device.TEMPERATURE, tempValue.scale)
+                })
 
         return sConf
 
     def runCommand(self, topic, command):
         HaDevice._runCommand(self, topic, command)
         topicType = topic.split('/')[-1].upper()
-        payload = json.loads(command)
-        if topicType == 'MODE':
-            mode = {'fan_only': Thermostat.MODE_FAN}.get(payload, payload)
-            setpoint = self.getClimateSetPoint(mode)
-            if setpoint:
-                value = {
-                    'mode': mode,
-                    'changeMode': True,
-                    'temperature': self.getClimateSetPoint(mode)
-                }
-                self._deviceCommand(Device.THERMOSTAT, value=value)
-            else:
-                logging.info('Can not set mode, !setpoint')
+        if topicType == 'SETMODE':
+            value = {
+                'mode': command,
+                'changeMode': True,
+            }
+            self._deviceCommand(Device.THERMOSTAT, value=value)
         elif topicType == 'SETPOINT':
-            setpoint = float(payload) if payload else None
-            if setpoint:
-                value = {
-                    'mode': self.getClimateMode(),
-                    'changeMode': False,
-                    'temperature': setpoint
-                }
-                self._deviceCommand(Device.THERMOSTAT, value=value)
-            else:
-                logging.info('Can not update setpoint, !setpoint (%s)' % payload)
+            setpoint = float(command) if command else None
+            value = {
+                'changeMode': False,
+                'temperature': setpoint
+            }
+            self._deviceCommand(Device.THERMOSTAT, value=value)
 
 
 class HaBattery(HaDevice):
