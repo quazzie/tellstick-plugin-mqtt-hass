@@ -1,7 +1,7 @@
 from time import gmtime, strftime
-import netifaces
-from board import Board
-from telldus import Device
+import netifaces  # type: ignore
+from board import Board  # type: ignore
+from telldus import Device  # type: ignore
 
 
 def getMacAddr(compact=True):
@@ -11,6 +11,15 @@ def getMacAddr(compact=True):
     except (IndexError, KeyError):
         return ''
     return mac.upper().replace(':', '') if compact else mac.upper()
+
+
+def getIpAddr():
+    iface = netifaces.ifaddresses(Board.networkInterface())
+    try:
+        inet = iface[netifaces.AF_INET][0]
+    except:
+        inet = {'addr': ''}
+    return inet.get('addr', '')
 
 
 def slugify(value):
