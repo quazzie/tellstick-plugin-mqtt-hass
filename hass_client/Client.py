@@ -138,7 +138,9 @@ class Client(Plugin):
             devs.HaLiveConnection(self.hub, self.live, self._buildTopic),
             devs.HaIpAddr(self.hub, self._buildTopic),
             devs.HaCpu(self.hub, self._buildTopic),
-            devs.HaRamFree(self.hub, self._buildTopic)
+            devs.HaRamFree(self.hub, self._buildTopic),
+            devs.HaNetIORecv(self.hub, self._buildTopic),
+            devs.HaNetIOSent(self.hub, self._buildTopic)
         ]
         self.devices = self.staticDevices + []
         Application().queue(self.discoverAndConnect)
@@ -277,10 +279,6 @@ class Client(Plugin):
 
     def publishDevice(self, haDev):
         config = self._getDeviceConfig(haDev)
-        if self.config('useEntityCategories'):
-            config.update({
-                'entity_category': haDev.getCategory()
-            })
         topic = '%s/config' % haDev.getDeviceTopic()
         self._debug('publish config for (%s) %s : %s' % (haDev.getID(), topic, json.dumps(config)))
         if self.mqtt_connected_flag:

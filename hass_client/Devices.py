@@ -70,7 +70,7 @@ class HaHub(HaBaseDevice):
             'payload_off': 'offline',
             'device': {
                 'identifiers': getMacAddr(True),
-                #'connections': [['mac', getMacAddr(False)]],
+                # 'connections': [['mac', getMacAddr(False)]],
                 'manufacturer': 'Telldus Technologies',
                 'model': Board.product().replace('-', ' ').title().replace(' ', '_'),
                 'name': self.getName(),
@@ -78,7 +78,7 @@ class HaHub(HaBaseDevice):
             }
         })
         if self.confUrl:
-            conf.update({'configuration_url': self.confUrl})
+            conf.get('device', {}).update({'configuration_url': self.confUrl})
         return conf
 
     def getWillState(self):
@@ -88,11 +88,11 @@ class HaHub(HaBaseDevice):
 class HaHubDevice(HaBaseDevice):
     def __init__(self, hub, deviceId, deviceName, deviceType, buildTopic, viaDevice=None, category=None):
         super(HaHubDevice, self).__init__(
-            deviceId, 
-            deviceName, 
-            deviceType, 
-            buildTopic, 
-            viaDevice or {'identifiers': hub.getConfig().get('device', {}).get('identifiers', '')}, 
+            deviceId,
+            deviceName,
+            deviceType,
+            buildTopic,
+            viaDevice or {'identifiers': hub.getConfig().get('device', {}).get('identifiers', '')},
             category
         )
         self.hub = hub
@@ -112,7 +112,10 @@ class HaHubSensor(HaHubDevice):
 
     def getConfig(self):
         conf = super(HaHubSensor, self).getConfig()
-        conf.update({'unit_of_measurement': self.unit or ''})
+        conf.update({
+            'unit_of_measurement': self.unit or '',
+            'state_class': 'measurement'
+        })
         return conf
 
 
@@ -173,7 +176,12 @@ class HaNetIOSent(HaHubSensor, HaTimedSensor):
         super(HaNetIOSent, self).__init__(hub, 'net_sent', 'Network sent bytes', buildTopic, None, None, 'Mb')
 
     def getState(self):
-        return int(psutil.net_io_counters().bytes_sent / 1024)
+        return int(psutil.net_io_counters().bytes_sent / 1024 / 1024)
+
+    def getConfig(self):
+        conf = HaHubSensor.getConfig(self)
+        conf.update({'state_class': 'total_increasing'})
+        return conf
 
 
 class HaNetIORecv(HaHubSensor, HaTimedSensor):
@@ -181,7 +189,12 @@ class HaNetIORecv(HaHubSensor, HaTimedSensor):
         super(HaNetIORecv, self).__init__(hub, 'net_recv', 'Network recv bytes', buildTopic, None, None, 'Mb')
 
     def getState(self):
-        return psutil.net_io_counters().bytes_recv / 1024
+        return int(psutil.net_io_counters().bytes_recv / 1024 / 1024)
+
+    def getConfig(self):
+        conf = HaHubSensor.getConfig(self)
+        conf.update({'state_class': 'total_increasing'})
+        return conf
 
 
 class HaDeviceSensor(HaHubSensor):
@@ -246,14 +259,14 @@ class HaDeviceSwitch(HaHubDevice):
     def getConfig(self):
         conf = super(HaDeviceSwitch, self).getConfig()
         if self.device.methods() & Device.BELL:
-            conf.update({ 'payload_on': 'BELL' })
+            conf.update({'payload_on': 'BELL'})
         return conf
 
     def runCommand(self, topic, payload):
         self._deviceCommand(
-            self.device, 
-            Device.TURNON if payload.upper() == 'ON' \
-            else Device.BELL if payload.upper() == 'BELL' \
+            self.device,
+            Device.TURNON if payload.upper() == 'ON'
+            else Device.BELL if payload.upper() == 'BELL'
             else Device.TURNOFF
         )
 
@@ -280,7 +293,7 @@ class HaDeviceLight(HaHubDevice):
     def getConfig(self):
         conf = super(HaDeviceLight, self).getConfig()
         conf.update({
-            'schema': 'json', 
+            'schema': 'json',
             'brightness': True
         })
         return conf
@@ -457,7 +470,7 @@ def createDevices(device, hub, buildTopic, createSubDevices=False):
 
     subDevice = {
         'identifiers': device.getOrCreateUUID(),
-        #'connections': [['mac', getMacAddr(False)]],
+        # 'connections': [['mac', getMacAddr(False)]],
         'manufacturer': device.protocol().title(),
         'model': device.model().title(),
         'name': device.name(),
